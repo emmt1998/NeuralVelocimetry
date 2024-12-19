@@ -172,7 +172,5 @@ def fastVel(
             plt.grid()
             plt.show()
     dis = net.efforward(X0)
-    newx = X0+dis
-
     vel = dis.cpu().numpy()
     return net, optimizer, vel

@@ -7,6 +7,12 @@ from PIL import Image
 import matplotlib.colors as colors
 import plotly.figure_factory as ff
 
+import os
+import shutil
+dir_path = os.path.dirname(os.path.realpath(__file__))
+os.environ['GRADIO_TEMP_DIR'] = os.path.join(dir_path, "tmp")
+if not os.path.isdir(os.environ['GRADIO_TEMP_DIR']):
+    os.makedirs(os.environ['GRADIO_TEMP_DIR'])
 rng_agent = np.random.default_rng(0)
 
 def fig2img(fig):
@@ -49,9 +55,10 @@ def predict(img1, img2, sigma, epochs, random_seed, B_size, S_layers, N_layers, 
     x = np.arange(img1.shape[0])
     y = np.arange(img1.shape[1])
     X, Y = np.meshgrid(y, x[::-1])
+    print("saving")
+    np.savez_compressed(os.path.join(os.environ['GRADIO_TEMP_DIR'],"flow_result.npz"), X=X, Y=Y, U=Ux, V=Uy)
+    print("saved")
     Xr, Yr = np.meshgrid(y, x)
-
-   
 
     scale = 10
     step = 10
@@ -101,7 +108,7 @@ def predict(img1, img2, sigma, epochs, random_seed, B_size, S_layers, N_layers, 
     oimg4 = fig2img(fig)
     # fig = ff.create_quiver(X, Y, Ux, Uy)
     # print(type(fig))
-    return oimg01, oimg0, oimg2, oimg3, oimg4#,  fig.to_html()
+    return oimg01, oimg0, oimg2, oimg3, oimg4, os.path.join(os.environ['GRADIO_TEMP_DIR'],"flow_result.npz")#,  fig.to_html()
 
 def pre_procces(img1, img2, 
                 clahe, blur, reduce_by, 
@@ -149,10 +156,13 @@ if __name__ == "__main__":
     with gr.Blocks() as demo:
         gr.Markdown(
         """
-        # Direct Dense Flow Estimation Using Neural Networks
-        Code Author: Efraín Magaña.
+        # Direct Displacement Field estimation using Neural Networks
+        Code Author: Efraín Magaña (emmagana at uc.cl)
         """)
-        file = gr.FileExplorer()
+        gr.Markdown(
+        """
+        ## Load images & preprocessing
+        """)
         with gr.Row():
             img1 = gr.Image()#eraser=False, brush=False, layers=False)
             img2 = gr.Image()#eraser=False, brush=False, layers=False)
@@ -196,11 +206,14 @@ if __name__ == "__main__":
                         outputs=[img1_pre, img2_pre])
             rest_mean.change(pre_procces, inputs=inputs_pre, 
                         outputs=[img1_pre, img2_pre])
-
+        gr.Markdown(
+        """
+        ## Hyperparameters configuration
+        """)
             
         with gr.Row():
             with gr.Column():
-                sigma = gr.Number(50, label="sigma", minimum=1)
+                sigma = gr.Number(50, label="beta", minimum=1)
                 epochs = gr.Number(100, label="epochs", minimum=1)
                 batchs = gr.Number(100000, label="batchs", minimum=32, step=100)
             with gr.Column():
@@ -212,8 +225,13 @@ if __name__ == "__main__":
                 with gr.Row():
                     fixed_bttn = gr.Button("Fixed Seed")
                     random_bttn = gr.Button("Random Seed")
-
-        run = gr.Button()
+        gr.Markdown(
+        """
+        ## Run & Results
+        """)
+        with gr.Column():
+            run = gr.Button()        
+            down = gr.File(label="Output files")
 
         def setRnd():
             return gr.Number(rng_agent.choice(int(1e8)))
@@ -221,27 +239,28 @@ if __name__ == "__main__":
         def changeRnd():
             return gr.Number(-1)
         random_bttn.click(changeRnd, inputs=None, outputs=[random])
-        gr.Markdown(
-        """
-        # Results
-        """)
+
         with gr.Row():
             output = gr.Image(label="Original Superpotition", format="png")
             output2 = gr.Image(label="Deformed Superpotition", format="png")
         # output_quiver = gr.HTML(label="Quiver")
-        output_vel = gr.Image(label="Velocity", format="png")
 
         with gr.Row():
             output3 = gr.Image(label="Flow on x", format="png")
             output4 = gr.Image(label="Flow on y", format="png")
+
+        output_vel = gr.Image(label="Velocity", format="png")
         # def pri():print(img2.t, type(img2.transforms[0]))
         # img2.apply(pri, inputs=None, outputs=None)
 
         event = run.click(predict, 
                           [img1_pre, img2_pre, sigma, epochs, random, bsize, slayers, nlayers, batchs], 
-                          [output, output2, output3, output4, output_vel]
+                          [output, output2, output3, output4, output_vel, down]
                           )
         
 
     # demo.launch(share=True)
     demo.launch()
+    print("Deleting temp files")
+    # tmp_files = os.removedirs
+    shutil.rmtree(os.environ['GRADIO_TEMP_DIR'])
